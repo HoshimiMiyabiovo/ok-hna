@@ -8,7 +8,7 @@ cache/
 configs/_ok.json
 configs/devices.json
 configs/Notification.json
-configs/LauncherTask.json
+configs/*Task.json
 
 # ---------- 环境与缓存 ----------
 .venv/

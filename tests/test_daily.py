@@ -17,6 +17,7 @@ PAGE2 = 'in_game_daily_activity_2.png'
 DAKA = 'in_game_daily_daka.png'
 MAIN_UI = 'in_game_main_world_ui.png'
 MAIN_WORLD = 'in_game_main_world_updated.png'
+LIVE_HUD = 'in_game_main_world_hud.png'
 
 PAGE1_TITLES = {
     '登录游戏',
@@ -103,16 +104,32 @@ class TestDailyActivity(TaskTestCase):
         self.assertEqual(len(first | second), 6, first | second)
         self.assertEqual(len(first & second), 2, '两屏应有两张重叠卡片用于对齐翻页')
 
-    def test_f3_entry_feature_on_main_world(self):
+    def test_f3_entry_feature_on_live_hud(self):
+        self._set(LIVE_HUD)
+        box = self.task.find_one('main_world_f3_menu', threshold=0.9,
+                                 horizontal_variance=0.06, vertical_variance=0.02)
+        self.assertIsNotNone(box, '实机主世界帧应匹配到 F3 图标')
+        self.assertLess(abs(box.x - 1460), 3)
+        self.assertLess(abs(box.y - 58), 3)
+
+    def test_f3_entry_feature_found_after_hud_shift(self):
         self._set(MAIN_UI)
-        box = self.task.find_one('main_world_f3_menu', threshold=0.9)
-        self.assertIsNotNone(box, '主世界截图应匹配到 F3 图标')
-        self.assertLess(abs(box.x - 1561), 2)
-        self.assertLess(abs(box.y - 37), 2)
+        box = self.task.find_one('main_world_f3_menu', threshold=0.8,
+                                 horizontal_variance=0.06, vertical_variance=0.02)
+        self.assertIsNotNone(box, 'HUD 图标整体左移后仍应通过方差搜索命中 F3')
+        self.assertGreater(box.x, 1500)
 
     def test_f3_entry_feature_absent_on_panel(self):
         self._set(PAGE1)
-        self.assertIsNone(self.task.find_one('main_world_f3_menu', threshold=0.8), '面板页面不应匹配到 F3 图标')
+        self.assertIsNone(
+            self.task.find_one('main_world_f3_menu', threshold=0.8,
+                               horizontal_variance=0.06, vertical_variance=0.02),
+            '面板页面不应匹配到 F3 图标')
+
+    def test_live_hud_is_main_world(self):
+        self._set(LIVE_HUD)
+        self.assertTrue(self.task._is_in_main_world(), '实机主世界帧应命主世界 HUD 双特征')
+        self.assertFalse(self.task._is_daily_panel_open())
 
 
 if __name__ == '__main__':

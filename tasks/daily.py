@@ -100,11 +100,15 @@ class DailyActivityTask(BaseTask):
 
     def _open_daily_panel(self):
         self.log_info("打开 F3 面板")
-        self._click_f3_entry()
-        if not self._wait_until(self._is_daily_panel_open, 4):
+        opened = False
+        for attempt in range(1, 4):
             self._click_f3_entry()
-            if not self._wait_until(self._is_daily_panel_open, 4):
-                self._raise_with_evidence("未能打开 F3 面板（打卡项目/日常活跃）")
+            if self._wait_until(self._is_daily_panel_open, 5):
+                opened = True
+                break
+            self.log_info(f"第 {attempt} 次点击 F3 后未出现面板，重试")
+        if not opened:
+            self._raise_with_evidence("未能打开 F3 面板（打卡项目/日常活跃）")
         if not self._is_daily_tab():
             self.log_info("切换到「日常活跃」签页")
             self.click(*DAILY_TAB_POINT, after_sleep=1.2)
@@ -113,7 +117,8 @@ class DailyActivityTask(BaseTask):
         self.log_info("已进入日常活跃面板")
 
     def _click_f3_entry(self):
-        f3 = self.find_one(F3_FEATURE, threshold=0.85)
+        # HUD 图标会随功能解锁增加而整体左移，放宽水平搜索范围
+        f3 = self.find_one(F3_FEATURE, threshold=0.8, horizontal_variance=0.06, vertical_variance=0.02)
         if f3 is not None:
             self.log_info(f"点击主界面 F3 图标: {f3}")
             self.click(f3, after_sleep=1.2)

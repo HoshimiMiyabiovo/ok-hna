@@ -3,6 +3,7 @@ import re
 import time
 
 import psutil
+import win32gui
 from ok import BaseTask, TaskDisabledException, og
 from ok.util.process import execute, is_admin
 
@@ -11,8 +12,11 @@ LAUNCHER_EXE = "launcher.exe"
 DEFAULT_LAUNCHER_PATH = r"H:\Program Files\Game\Nexus Anima\launcher.exe"
 
 LOGIN_PAGE_PATTERN = re.compile(r"开始游戏|点击开始")
+RESTART_REQUIRED_PATTERN = re.compile(r"需要重启客户端|重启客户端")
 MAIN_WORLD_FEATURES = ("main_world_bag", "main_world_esc_badge")
-MAIN_WORLD_THRESHOLD = 0.85
+MAIN_WORLD_THRESHOLD = 0.70
+MAX_CLIENT_RESTARTS = 2
+WM_CLOSE = 0x0010
 
 GAME_CAPTURE_CONFIG = {
     "windows": {
@@ -39,11 +43,13 @@ class LauncherTask(BaseTask):
         self.name = "启动游戏"
         self.description = "启动启动器并进入游戏：点击启动器与游戏登录页的开始按钮，确认进入主世界"
         self.default_config.update({"Launcher Path": DEFAULT_LAUNCHER_PATH})
+        self._restart_count = 0
 
     def run(self):
         if not is_admin():
             raise TaskDisabledException(
                 "游戏进程以管理员权限运行，本程序必须以管理员身份启动才能操作游戏窗口（右键程序 → 以管理员身份运行）")
+        self._restart_count = 0
         if self._find_process(GAME_EXE):
             self.log_info("游戏已在运行，直接切换到游戏窗口")
             self._attach_game()
@@ -77,6 +83,9 @@ class LauncherTask(BaseTask):
             if self._is_in_main_world():
                 self.log_info("已进入主世界（HUD 特征已确认）")
                 return
+            if self._restart_required():
+                self._restart_game_client()
+                return self._enter_game(already_running=True)
             if self.ocr(match=LOGIN_PAGE_PATTERN):
                 self._click_login_until_ingame()
                 return
@@ -91,6 +100,9 @@ class LauncherTask(BaseTask):
             if self._is_in_main_world():
                 self.log_info("已进入主世界（HUD 特征已确认）")
                 return
+            if self._restart_required():
+                self._restart_game_client()
+                return self._click_login_until_ingame(timeout=timeout)
             boxes = self.ocr(match=LOGIN_PAGE_PATTERN)
             if boxes and time.time() - last_click >= 3:
                 if not self.hwnd.is_foreground():
@@ -107,6 +119,56 @@ class LauncherTask(BaseTask):
 
     def _is_in_main_world(self):
         return all(self.find_one(name, threshold=MAIN_WORLD_THRESHOLD) for name in MAIN_WORLD_FEATURES)
+
+    def _restart_required(self):
+        return bool(self.ocr(match=RESTART_REQUIRED_PATTERN))
+
+    def _restart_game_client(self):
+        if self._restart_count >= MAX_CLIENT_RESTARTS:
+            self._raise_enter_game_failed(
+                f"客户端已连续 {self._restart_count} 次要求重启应用更新，放弃重试")
+        self._restart_count += 1
+        self.screenshot("client_restart_required")
+        self.ocr(log=True)
+        process = self._find_process(GAME_EXE)
+        if process is None:
+            raise TaskDisabledException("客户端要求重启，但找不到游戏进程")
+        try:
+            exe_path = process.exe()
+        except (psutil.NoSuchProcess, psutil.AccessDenied) as exc:
+            raise TaskDisabledException(f"客户端要求重启，但读取游戏路径失败: {exc}")
+        self.log_info(f"客户端提示需要重启应用更新，关闭并重启: {exe_path}")
+        self._close_game_window()
+        if not self._wait_process_gone(GAME_EXE, 20):
+            process = self._find_process(GAME_EXE)
+            if process is not None:
+                process.terminate()
+            if not self._wait_process_gone(GAME_EXE, 15):
+                raise TaskDisabledException("关闭游戏进程失败，无法应用客户端更新")
+        if not execute(exe_path):
+            raise TaskDisabledException(f"重启游戏失败: {exe_path}")
+        if not self._wait_process(GAME_EXE, 180):
+            raise TaskDisabledException("等待游戏重启进程超时")
+        self._attach_game()
+        self.log_info("客户端已重启，继续进入游戏")
+
+    def _close_game_window(self):
+        hwnd = getattr(self.hwnd, "hwnd", None)
+        if hwnd:
+            self.log_info("发送 WM_CLOSE 关闭游戏窗口")
+            try:
+                win32gui.PostMessage(hwnd, WM_CLOSE, 0, 0)
+            except Exception as exc:
+                self.log_info(f"WM_CLOSE 发送失败: {exc}")
+        self.sleep(2)
+
+    def _wait_process_gone(self, exe_name, timeout):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if not self._find_process(exe_name):
+                return True
+            self.sleep(1)
+        return False
 
     def _raise_enter_game_failed(self, reason):
         self.screenshot("enter_game_failed")

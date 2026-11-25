@@ -10,7 +10,7 @@ if str(ROOT) not in sys.path:
 
 from config import config
 from ok.test.TaskTestCase import TaskTestCase
-from tasks.launcher import LOGIN_PAGE_PATTERN, LauncherTask
+from tasks.launcher import LOGIN_PAGE_PATTERN, RESTART_REQUIRED_PATTERN, LauncherTask
 
 
 class TestLauncherLoginPage(TaskTestCase):
@@ -46,8 +46,18 @@ class TestLauncherLoginPage(TaskTestCase):
 
     def test_updated_main_world_detected_by_hud(self):
         self.set_image(str(ROOT / 'ok_templates' / 'in_game_main_world_updated.png'))
-        self.assertTrue(self.task._is_in_main_world(), '新版主世界画面应同时匹配到背包和 Esc HUD 特征')
-        self.assertFalse(self.task.ocr(match=LOGIN_PAGE_PATTERN), '新版主世界不应残留登录页按钮')
+        self.assertTrue(self.task._is_in_main_world(), '旧版主世界画面应同时匹配到背包和 Esc HUD 特征')
+        self.assertFalse(self.task.ocr(match=LOGIN_PAGE_PATTERN), '主世界不应残留登录页按钮')
+
+    def test_live_hud_main_world_detected(self):
+        self.set_image(str(ROOT / 'ok_templates' / 'in_game_main_world_hud.png'))
+        self.assertTrue(self.task._is_in_main_world(), '实机主世界帧应命中背包与 Esc HUD 特征')
+        self.assertFalse(self.task.ocr(match=RESTART_REQUIRED_PATTERN), '主世界不应识别到重启提示')
+
+    def test_restart_required_modal_detected(self):
+        self.set_image(str(ROOT / 'ok_templates' / 'in_game_restart_required.png'))
+        self.assertTrue(self.task._restart_required(), '应识别到「需要重启客户端」提示')
+        self.assertFalse(self.task._is_in_main_world(), '重启提示页不是主世界')
 
 
 if __name__ == '__main__':
