@@ -41,6 +41,7 @@ config = {
     },
     "onetime_tasks": [
         ["tasks.launcher", "LauncherTask"],
+        ["tasks.daily", "DailyActivityTask"],
     ],
     "trigger_tasks": [],
     "mcp": {

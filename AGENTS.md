@@ -28,6 +28,10 @@
 - 「已进入游戏」只认主世界 HUD：模板 `main_world_bag` 与 `main_world_esc_badge` **同时命中**（阈值 0.85）。
 - 禁止用 UID 水印、账号信息、构建号等做状态判定；过场剧情/菜单不算进入主世界。
 - 判定失败必须保存截图 + 全量 OCR 文本并报错，不允许“点了就算成功”或放宽口径凑成功。
+- F3 面板：header OCR 命中 `日常活跃` / `打卡项目`；「日常活跃」签页用 `每日目标` 区分。
+- 面板入口模板 `main_world_f3_menu`（主世界 HUD 右上角 F3 图标，标注时避开红色礼包角标）。
+- 每日目标卡片：进度徽章 `x/y` 做锚点按列聚类；可领取 = 已完成 + 底栏无 `前往/进行中/已领取` 文字 + 金色占比达标；
+  领取后必须看到顶部当前活跃度数字增长，数字不动按失败处理。
 
 ## 图片素材与隐私（公开仓库）
 
@@ -39,6 +43,8 @@
 
 ## 测试
 
-- 运行：`.venv\Scripts\python.exe -m unittest tests.test_launcher`
+- 运行：`.venv\Scripts\python.exe -m tests.run_all`（逐模块子进程；`TaskTestCase` 依赖 Qt 单例，
+  同进程只能跑一个测试类，直接 `pytest tests` / 多模块 unittest 会二次初始化失败）。
+- 单模块：`.venv\Scripts\python.exe -m unittest tests.test_launcher`（daily 同理）。
 - `TaskTestCase` 的 `config['config_folder']` 必须隔离到临时目录：测试运行会保存设备/任务配置，污染 `configs/`。
 - 识别判定要有正样本 + 负样本（登录页、过场、主世界互相验证），并保留 `ok_templates/` 里的实机参考图。

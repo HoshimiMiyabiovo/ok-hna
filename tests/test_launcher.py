@@ -24,6 +24,7 @@ class TestLauncherLoginPage(TaskTestCase):
         cls._tmp_config = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls._tmp_config.cleanup)
         cls.config['config_folder'] = cls._tmp_config.name
+        cls.config['screenshots_folder'] = str(Path(cls._tmp_config.name) / 'screenshots')
         super().setUpClass()
 
     def test_start_game_page_detected_as_login(self):
@@ -43,10 +44,10 @@ class TestLauncherLoginPage(TaskTestCase):
         self.assertFalse(self.task._is_in_main_world(), '过场剧情阶段不应被判定为主世界')
         self.assertFalse(self.task.ocr(match=LOGIN_PAGE_PATTERN), '过场阶段不应识别到登录页按钮')
 
-    def test_main_world_detected_by_hud(self):
-        self.set_image(str(ROOT / 'ok_templates' / 'in_game_main_world.png'))
-        self.assertTrue(self.task._is_in_main_world(), '主世界画面应匹配到 HUD 特征')
-        self.assertFalse(self.task.ocr(match=LOGIN_PAGE_PATTERN), '主世界不应残留登录页按钮')
+    def test_updated_main_world_detected_by_hud(self):
+        self.set_image(str(ROOT / 'ok_templates' / 'in_game_main_world_updated.png'))
+        self.assertTrue(self.task._is_in_main_world(), '新版主世界画面应同时匹配到背包和 Esc HUD 特征')
+        self.assertFalse(self.task.ocr(match=LOGIN_PAGE_PATTERN), '新版主世界不应残留登录页按钮')
 
 
 if __name__ == '__main__':

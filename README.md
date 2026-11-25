@@ -2,7 +2,7 @@
 
 《崩坏：因缘精灵》（Nexus Anima）的自动化脚本工程，基于 [ok-script](https://github.com/ok-oldking/ok-script) 框架构建。
 
-> **状态：开发中。** 目前只实现了启动链路（启动器 → 点击开始 → 进入游戏并确认 UID），玩法任务待补充。
+> **状态：开发中。** 已实现启动链路（启动器 → 点击开始 → 主世界 HUD 确认）与日常活跃面板（扫描全部每日目标并领取已完成奖励），其余玩法任务待补充。
 
 ![Python](https://img.shields.io/badge/python-3.12-3776AB)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D4)
@@ -46,9 +46,12 @@ ok-hna/
 ├── requirements.txt
 ├── configs/                  # GUI 与任务配置（多数为运行时生成）
 ├── tasks/
-│   └── launcher.py           # 启动链路任务：点击开始、登录、UID 水印确认
+│   ├── launcher.py           # 启动链路任务：点击开始、登录、主世界 HUD 确认
+│   └── daily.py              # 日常活跃：F3 面板扫描每日目标（向左拖动翻页）并领取
 ├── tests/
-│   └── test_launcher.py      # 用 ok_templates 整图做的回归测试
+│   ├── test_launcher.py      # 用 ok_templates 整图做的回归测试
+│   ├── test_daily.py         # 日常活跃面板识别 / 卡片解析 / F3 模板回归
+│   └── run_all.py            # 逐模块子进程跑全部测试
 ├── ok_templates/             # 整图 + coco_annotations.json（模板源）
 ├── assets/templates/         # generate_templates 生成的特征切片（运行时用）
 ├── ok_tasks/                 # 自定义脚本任务
@@ -63,10 +66,11 @@ ok-hna/
 
 > 动手前先读 [AGENTS.md](AGENTS.md)：里面写死了运行环境（管理员权限）、PostMessage 交互、主世界判定口径、素材打码与测试隔离等硬性约定。
 
-- **启动链路**：`tasks/launcher.py` 按「登录页 → 点击开始 → 读取 UID 水印」推进，识别失败时回退为「已在游戏中」。
+- **启动链路**：`tasks/launcher.py` 按「登录页 → 点击开始 → 主世界 HUD 双特征确认」推进，识别失败时回退为「已在游戏中」。
+- **日常活跃**：`tasks/daily.py` 从主世界点 F3 图标（模板 `main_world_f3_menu`，备用 F3 快捷键）打开面板，切到左侧中间「日常活跃」入口；每日目标是横向卡片列表，一屏只露 4 张多一点，任务会向左拖动直到卡片不再变化；按卡片进度、底栏金色按钮和文字状态识别任务，点击领取后用顶部活跃度数字增长做硬校验。完整链路尚未实机验证，首次运行以日志和失败截图为准校准。
 - **模板资产**：不要手裁运行时截图当模板。整图放 `ok_templates/`，在 `ok_templates/coco_annotations.json` 里用 `CocoTemplateStore` 标注，再调用 `generate_templates` 生成到 `assets/templates/`，代码里用原始名字走 `find_feature` / `find_one`。
 - **开发规范**：先读 `.agents/skills/ok-script-develop/SKILL.md`，它会指向 ok-script 自带的 `develop` / `generate-templates` / `write-test` / `reload-tasks` 说明。
-- **回归测试**：`python -m pytest tests`，用 `ok_templates/` 里的整图作为测试夹具。
+- **回归测试**：`python -m tests.run_all`（逐模块子进程运行；ok-script 的 `TaskTestCase` 依赖 Qt 单例，同一进程只能跑一个测试类，直接 `pytest tests` 会因二次初始化失败）。
 
 ## MCP 工具
 

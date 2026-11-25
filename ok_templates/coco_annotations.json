@@ -5,33 +5,58 @@
       "file_name": "in_game_main_world.png",
       "width": 1920,
       "height": 1080
+    },
+    {
+      "id": 2,
+      "file_name": "in_game_main_world_updated.png",
+      "width": 1919,
+      "height": 1056
+    },
+    {
+      "id": 3,
+      "file_name": "in_game_main_world_ui.png",
+      "width": 1919,
+      "height": 1045
     }
   ],
   "annotations": [
     {
       "id": 1,
-      "image_id": 1,
+      "image_id": 2,
       "category_id": 1,
       "bbox": [
-        1812.0,
-        24.0,
-        70.0,
-        115.0
+        1664.0,
+        22.0,
+        74.0,
+        72.0
       ],
-      "area": 8050.0,
+      "area": 5328.0,
       "iscrowd": 0
     },
     {
       "id": 2,
-      "image_id": 1,
+      "image_id": 2,
       "category_id": 2,
       "bbox": [
-        37.0,
-        88.0,
-        52.0,
-        28.0
+        14.0,
+        82.0,
+        64.0,
+        36.0
       ],
-      "area": 1456.0,
+      "area": 2304.0,
+      "iscrowd": 0
+    },
+    {
+      "id": 3,
+      "image_id": 3,
+      "category_id": 3,
+      "bbox": [
+        1561.0,
+        37.0,
+        38.0,
+        47.0
+      ],
+      "area": 1786.0,
       "iscrowd": 0
     }
   ],
@@ -44,6 +69,11 @@
     {
       "id": 2,
       "name": "main_world_esc_badge",
+      "supercategory": ""
+    },
+    {
+      "id": 3,
+      "name": "main_world_f3_menu",
       "supercategory": ""
     }
   ]
