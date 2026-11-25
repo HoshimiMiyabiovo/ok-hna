@@ -1,0 +1,14 @@
+{
+    "Auto Start Game When App Starts": false,
+    "Exit App when Game Exits": false,
+    "Auto Resize Game Window": true,
+    "Mute Game while in Background": false,
+    "Launch with DX11": false,
+    "Start/Stop": "F9",
+    "Trigger Interval": 1,
+    "Minimize Window to System Tray when Closing": false,
+    "Kill Launcher After Start": true,
+    "Create Start Menu Shortcut": false,
+    "Create Desktop Shortcut": false,
+    "Enable MCP Server": false
+}

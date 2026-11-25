@@ -1,0 +1,48 @@
+# ---------- 运行时产物 ----------
+# 含游戏截图 / OCR 文本，可能有个人标识（UID 等），勿提交
+logs/
+screenshots/
+cache/
+
+# 本机运行时状态：含本机绝对路径、窗口句柄、通知密钥，勿提交
+configs/_ok.json
+configs/devices.json
+configs/Notification.json
+configs/LauncherTask.json
+
+# ---------- 环境与缓存 ----------
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# ---------- 模板生成中间产物 ----------
+# assets/templates 由 generate_templates 从 ok_templates 重建
+assets/templates/.gitkeep
+assets/templates/tmp/
+ok_templates/tmp/
+ok_templates/*.bak
+
+# ---------- 编辑器 / 系统 ----------
+.vscode/
+.idea/
+*.swp
+*~
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---------- 打包与临时 ----------
+*.zip
+*.7z
+*.rar
+*.log
+.dsh-tmp/
+*.orig
+*.rej

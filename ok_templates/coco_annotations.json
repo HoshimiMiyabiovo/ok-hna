@@ -1,0 +1,50 @@
+{
+  "images": [
+    {
+      "id": 1,
+      "file_name": "in_game_main_world.png",
+      "width": 1920,
+      "height": 1080
+    }
+  ],
+  "annotations": [
+    {
+      "id": 1,
+      "image_id": 1,
+      "category_id": 1,
+      "bbox": [
+        1812.0,
+        24.0,
+        70.0,
+        115.0
+      ],
+      "area": 8050.0,
+      "iscrowd": 0
+    },
+    {
+      "id": 2,
+      "image_id": 1,
+      "category_id": 2,
+      "bbox": [
+        37.0,
+        88.0,
+        52.0,
+        28.0
+      ],
+      "area": 1456.0,
+      "iscrowd": 0
+    }
+  ],
+  "categories": [
+    {
+      "id": 1,
+      "name": "main_world_bag",
+      "supercategory": ""
+    },
+    {
+      "id": 2,
+      "name": "main_world_esc_badge",
+      "supercategory": ""
+    }
+  ]
+}
