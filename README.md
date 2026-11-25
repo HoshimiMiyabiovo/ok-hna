@@ -52,6 +52,7 @@ ok-hna/
 ├── ok_templates/             # 整图 + coco_annotations.json（模板源）
 ├── assets/templates/         # generate_templates 生成的特征切片（运行时用）
 ├── ok_tasks/                 # 自定义脚本任务
+├── AGENTS.md                 # 仓库长期约定（运行环境、交互方式、素材与隐私、测试）
 ├── .agents/skills/           # ok-script 开发规范（模板生成、任务重载、写测试）
 ├── cache/                    # ONNX 优化缓存（忽略）
 ├── logs/                     # 运行日志与 MCP 产物（忽略）
@@ -59,6 +60,8 @@ ok-hna/
 ```
 
 ## 任务开发
+
+> 动手前先读 [AGENTS.md](AGENTS.md)：里面写死了运行环境（管理员权限）、PostMessage 交互、主世界判定口径、素材打码与测试隔离等硬性约定。
 
 - **启动链路**：`tasks/launcher.py` 按「登录页 → 点击开始 → 读取 UID 水印」推进，识别失败时回退为「已在游戏中」。
 - **模板资产**：不要手裁运行时截图当模板。整图放 `ok_templates/`，在 `ok_templates/coco_annotations.json` 里用 `CocoTemplateStore` 标注，再调用 `generate_templates` 生成到 `assets/templates/`，代码里用原始名字走 `find_feature` / `find_one`。
