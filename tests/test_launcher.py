@@ -1,4 +1,5 @@
 import copy
+import shutil
 import sys
 import tempfile
 import unittest
@@ -10,7 +11,8 @@ if str(ROOT) not in sys.path:
 
 from config import config
 from ok.test.TaskTestCase import TaskTestCase
-from tasks.launcher import LOGIN_PAGE_PATTERN, RESTART_REQUIRED_PATTERN, LauncherTask
+from tasks.launcher import (GAME_CAPTURE_CONFIG, LAUNCHER_CAPTURE_CONFIG, LOGIN_PAGE_PATTERN,
+                            RESTART_REQUIRED_PATTERN, LauncherTask)
 
 
 class TestLauncherLoginPage(TaskTestCase):
@@ -21,10 +23,12 @@ class TestLauncherLoginPage(TaskTestCase):
     def setUpClass(cls):
         cls.config['gui'] = None
         # 测试运行会保存设备/任务配置，隔离到临时目录避免污染项目 configs
-        cls._tmp_config = tempfile.TemporaryDirectory()
-        cls.addClassCleanup(cls._tmp_config.cleanup)
-        cls.config['config_folder'] = cls._tmp_config.name
-        cls.config['screenshots_folder'] = str(Path(cls._tmp_config.name) / 'screenshots')
+        # 本机沙箱禁止删除临时目录里的子目录，tempfile.TemporaryDirectory 的清理会硬报错；
+        # 这里用 mkdtemp + 忽略错误的 rmtree，隔离等价但清理失败不算测试失败
+        cls._tmp_config = Path(tempfile.mkdtemp())
+        cls.addClassCleanup(shutil.rmtree, cls._tmp_config, True)
+        cls.config['config_folder'] = str(cls._tmp_config)
+        cls.config['screenshots_folder'] = str(cls._tmp_config / 'screenshots')
         super().setUpClass()
 
     def test_start_game_page_detected_as_login(self):
@@ -58,6 +62,11 @@ class TestLauncherLoginPage(TaskTestCase):
         self.set_image(str(ROOT / 'ok_templates' / 'in_game_restart_required.png'))
         self.assertTrue(self.task._restart_required(), '应识别到「需要重启客户端」提示')
         self.assertFalse(self.task._is_in_main_world(), '重启提示页不是主世界')
+
+    def test_game_uses_foreground_pynput(self):
+        # 0.75.2 起游戏内 UI 忽略 PostMessage，必须用前台真实输入
+        self.assertEqual(GAME_CAPTURE_CONFIG['windows']['interaction'], 'Pynput')
+        self.assertEqual(LAUNCHER_CAPTURE_CONFIG['windows']['interaction'], 'Pynput')
 
 
 if __name__ == '__main__':

@@ -23,6 +23,36 @@
       "file_name": "in_game_main_world_hud.png",
       "width": 1920,
       "height": 1080
+    },
+    {
+      "id": 5,
+      "file_name": "in_game_battle_prepare.png",
+      "width": 1919,
+      "height": 1079
+    },
+    {
+      "id": 6,
+      "file_name": "in_game_daily_activity_3.png",
+      "width": 1919,
+      "height": 1079
+    },
+    {
+      "id": 7,
+      "file_name": "in_game_stamina_shop_material.png",
+      "width": 1919,
+      "height": 1079
+    },
+    {
+      "id": 8,
+      "file_name": "in_game_stamina_shop_mind.png",
+      "width": 1919,
+      "height": 1079
+    },
+    {
+      "id": 9,
+      "file_name": "in_game_battle_lineup.png",
+      "width": 1919,
+      "height": 1079
     }
   ],
   "annotations": [
@@ -64,6 +94,45 @@
       ],
       "area": 1624.0,
       "iscrowd": 0
+    },
+    {
+      "id": 7,
+      "image_id": 5,
+      "category_id": 4,
+      "bbox": [
+        1812.0,
+        895.0,
+        66.0,
+        66.0
+      ],
+      "area": 4356.0,
+      "iscrowd": 0
+    },
+    {
+      "id": 8,
+      "image_id": 5,
+      "category_id": 5,
+      "bbox": [
+        1650.0,
+        978.0,
+        120.0,
+        45.0
+      ],
+      "area": 5400.0,
+      "iscrowd": 0
+    },
+    {
+      "id": 9,
+      "image_id": 9,
+      "category_id": 6,
+      "bbox": [
+        1752.0,
+        1024.0,
+        120.0,
+        42.0
+      ],
+      "area": 5040.0,
+      "iscrowd": 0
     }
   ],
   "categories": [
@@ -80,6 +149,21 @@
     {
       "id": 3,
       "name": "main_world_f3_menu",
+      "supercategory": ""
+    },
+    {
+      "id": 4,
+      "name": "battle_count_plus",
+      "supercategory": ""
+    },
+    {
+      "id": 5,
+      "name": "battle_challenge",
+      "supercategory": ""
+    },
+    {
+      "id": 6,
+      "name": "battle_start_duel",
       "supercategory": ""
     }
   ]

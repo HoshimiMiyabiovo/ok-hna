@@ -22,7 +22,9 @@ config = {
     },
     "windows": {
         "exe": ["NexusAnima.exe"],
-        # 游戏以管理员运行，程序需管理员权限；PostMessage 可后台点击并保持抓帧
+        # 游戏以管理员运行，程序需管理员权限。启动/设备准备阶段用 PostMessage
+        # （后台也能抓帧）；进入游戏后的点击由 launcher/daily 的 ensure_capture
+        # 切到 Pynput（0.75.2 起游戏内 UI 只接受真实输入，窗口必须前台）
         "interaction": ["PostMessage", "Pynput"],
         "capture_method": ["WGC", "BitBlt_RenderFull", "BitBlt"],
         "check_hdr": False,

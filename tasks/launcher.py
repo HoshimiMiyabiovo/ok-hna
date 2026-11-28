@@ -22,8 +22,9 @@ GAME_CAPTURE_CONFIG = {
     "windows": {
         "exe": GAME_EXE,
         # ensure_capture 的 interaction 只接受字符串（传列表会破坏 interacting 类解析）；
-        # PostMessage 可后台点击且不阻塞抓帧，Pynput 仅前台可用
-        "interaction": "PostMessage",
+        # 0.75.2 起游戏内 UI 忽略 PostMessage 注入，必须用 Pynput 真实输入；
+        # Pynput 要求窗口前台（on_run 会自动切前台），后台状态下不会点击也不会抓帧
+        "interaction": "Pynput",
         "capture_method": ["WGC", "BitBlt_RenderFull", "BitBlt"],
     }
 }
@@ -31,7 +32,8 @@ GAME_CAPTURE_CONFIG = {
 LAUNCHER_CAPTURE_CONFIG = {
     "windows": {
         "exe": LAUNCHER_EXE,
-        "interaction": "PostMessage",
+        # 启动器同样走真实点击，保证与游戏内交互方式一致
+        "interaction": "Pynput",
         "capture_method": ["WGC", "BitBlt_RenderFull", "BitBlt"],
     }
 }
@@ -70,6 +72,8 @@ class LauncherTask(BaseTask):
 
     def _attach_game(self):
         self._ensure_capture(GAME_CAPTURE_CONFIG)
+        # Pynput 只在前台抓帧/点击，切完截图目标立刻把游戏窗口切到前台
+        self.hwnd.bring_to_front()
         self._wait_connection()
         error = og.app.start_controller.check_resolution()
         if error:
@@ -78,6 +82,8 @@ class LauncherTask(BaseTask):
 
     def _enter_game(self, already_running=False):
         deadline = time.time() + (60 if already_running else 300)
+        # Pynput 只在前台点击/抓帧，先把游戏窗口切到前台
+        self.hwnd.bring_to_front()
         while time.time() < deadline:
             self.next_frame()
             if self._is_in_main_world():
@@ -188,6 +194,7 @@ class LauncherTask(BaseTask):
 
     def _click_start(self, timeout=180):
         self.log_info("在启动器中查找「开始游戏」按钮")
+        self.hwnd.bring_to_front()
         start = time.time()
         while time.time() - start < timeout:
             self.next_frame()
