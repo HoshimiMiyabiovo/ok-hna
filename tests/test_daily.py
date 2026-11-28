@@ -18,6 +18,7 @@ from tasks.daily import (BATTLE_RESULT_PATTERN, BLANK_CLOSE_PATTERN, BUTTON_LABE
                           DUEL_BUTTON_REGION, DUEL_PATTERN, EXIT_PATTERN, LEVEL_CONFIRM_REGION,
                           LEVEL_WARNING_PATTERN, MILESTONE_CHEST_Y, STAMINA_BATTLE_REGION,
                           STAMINA_CARD_PATTERN, DailyActivityTask)
+from tasks.welfare import WelfareTask
 
 PAGE1 = 'in_game_daily_activity_1.png'
 PAGE2 = 'in_game_daily_activity_2.png'
@@ -405,6 +406,55 @@ class TestDailyActivity(TaskTestCase):
             with self.assertRaises(TaskDisabledException):
                 self.task._scan_and_claim()
         claim.assert_not_called()
+
+    # ---------- 一条龙收尾：日常 → 帮会助力战令 + 邮件 ----------
+
+    def test_daily_run_chains_welfare_after_panel_closed(self):
+        welfare = mock.Mock()
+        calls = mock.Mock()
+        self.task.config['日常后领取福利'] = True
+        try:
+            with mock.patch('tasks.daily.is_admin', return_value=True), \
+                    mock.patch.object(self.task.executor.device_manager, 'hwnd_window') as hwnd, \
+                    mock.patch.object(self.task, '_ensure_in_main_world') as ensure, \
+                    mock.patch.object(self.task, '_open_daily_panel') as open_panel, \
+                    mock.patch.object(self.task, '_scan_and_claim') as scan, \
+                    mock.patch.object(self.task, '_claim_milestones') as milestones, \
+                    mock.patch.object(self.task, '_run_stamina_battles', return_value=False) as battle, \
+                    mock.patch.object(self.task, '_close_panel') as close, \
+                    mock.patch.object(self.task, 'get_task_by_class', return_value=welfare) as get_task:
+                calls.attach_mock(hwnd.bring_to_front, 'focus')
+                calls.attach_mock(ensure, 'ensure')
+                calls.attach_mock(open_panel, 'open')
+                calls.attach_mock(scan, 'scan')
+                calls.attach_mock(milestones, 'milestones')
+                calls.attach_mock(battle, 'battle')
+                calls.attach_mock(close, 'close')
+                calls.attach_mock(get_task, 'get_task')
+                calls.attach_mock(welfare.run, 'welfare_run')
+                self.task.run()
+            self.assertEqual(calls.mock_calls, [
+                mock.call.focus(), mock.call.ensure(), mock.call.open(), mock.call.scan(),
+                mock.call.milestones(), mock.call.battle(), mock.call.close(),
+                mock.call.get_task(WelfareTask), mock.call.welfare_run(),
+            ], '必须先关闭日常面板并回到主世界，再启动福利领取')
+        finally:
+            self.task.config['日常后领取福利'] = True
+
+    def test_welfare_after_daily_skips_when_disabled(self):
+        self.task.config['日常后领取福利'] = False
+        try:
+            with mock.patch.object(self.task, 'get_task_by_class') as get_task:
+                self.task._claim_welfare_after_daily()
+            get_task.assert_not_called()
+        finally:
+            self.task.config['日常后领取福利'] = True
+
+    def test_welfare_after_daily_requires_registration(self):
+        from ok import TaskDisabledException
+        with mock.patch.object(self.task, 'get_task_by_class', return_value=None):
+            with self.assertRaises(TaskDisabledException):
+                self.task._claim_welfare_after_daily()
 
 
 if __name__ == '__main__':

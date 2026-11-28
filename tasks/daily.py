@@ -19,6 +19,8 @@
 战斗是多波自动战斗（6 次约 6 分钟），结算界面为「挑战完成」，点「退出」回到作战准备。
 一场 6 次刚好 120 精力，同时把「赢得任意3场因缘对决」一起做掉，回来再扫一遍领取奖励。
 本轮作战以「体力数字下降 + 卡片进度前进」双向校验，任一不成立就落证据失败。
+日常关闭面板回到主世界后，默认继续调用「领取福利」任务，把 F4 帮会助力（奖励页+任务页）与邮件接入一条龙；
+DailyActivityTask 的「日常后领取福利」开关可单独关闭这一段。
 
 实机输入：0.75.2 起 PostMessage 对游戏内 UI 无效，必须用 Pynput 真实输入并保持游戏前台。
 比例坐标来自 2026-11-27 实机截图（1920x1080），旧版 1919x1049 素材仍兼容。
@@ -36,6 +38,7 @@ from ok.feature.Box import Box
 from ok.util.process import is_admin
 
 from tasks.launcher import GAME_EXE, MAIN_WORLD_FEATURES, MAIN_WORLD_THRESHOLD, LauncherTask
+from tasks.welfare import WelfareTask
 
 F3_FEATURE = "main_world_f3_menu"
 
@@ -121,13 +124,14 @@ class DailyActivityTask(BaseTask):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = "日常活跃"
-        self.description = "扫描「日常活跃」每日目标（向左拖动翻页）领取奖励，并前往「勤劳是福」消耗精力作战补满活跃度"
+        self.description = "扫描「日常活跃」每日目标、消耗精力作战补活跃度，完成后继续领取帮会助力战令与邮件"
         self.default_config.update({
             '消耗精力作战': True,
             '体力材料': SHOP_TASK_TITLES[0],
             '最多战斗次数': 6,
             '作战轮数': 1,
             '作战等待秒数': 600,
+            '日常后领取福利': True,
         })
         self.config_description.update({
             '消耗精力作战': '日常目标里有「消耗精力」时，前往勤劳是福打一场并把挑战次数拉到上限，顺带完成对战任务',
@@ -135,6 +139,7 @@ class DailyActivityTask(BaseTask):
             '最多战斗次数': '单场战斗的挑战次数上限，默认 6（20 精力/次刚好凑满 120）',
             '作战轮数': '最多连打几轮；一轮通常就能把「消耗X精力」做满',
             '作战等待秒数': '点击「开始对决」后等待结算的最长秒数，6 次挑战实机约 6 分钟',
+            '日常后领取福利': '日常结束后继续领取 F4 帮会助力（奖励页+任务页）与邮件附件',
         })
         self.config_type.update({
             '体力材料': {'type': 'drop_down', 'options': list(SHOP_TASK_TITLES)},
@@ -157,6 +162,17 @@ class DailyActivityTask(BaseTask):
             self._scan_and_claim()
             self._claim_milestones()
         self._close_panel()
+        self._claim_welfare_after_daily()
+
+    def _claim_welfare_after_daily(self):
+        if not self.config.get('日常后领取福利', True):
+            self.log_info('已关闭「日常后领取福利」，跳过帮会助力与邮件领取')
+            return
+        welfare = self.get_task_by_class(WelfareTask)
+        if welfare is None:
+            raise TaskDisabledException('福利领取任务未注册，无法在一条龙中领取帮会助力与邮件')
+        self.log_info('日常已完成，继续领取帮会助力战令与邮件')
+        welfare.run()
 
     def _ensure_in_main_world(self):
         launcher = self.get_task_by_class(LauncherTask)
