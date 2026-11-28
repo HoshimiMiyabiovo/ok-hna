@@ -143,6 +143,8 @@ class TestDailyActivity(TaskTestCase):
 
     def test_level_warning_and_result_patterns(self):
         self.assertTrue(LEVEL_WARNING_PATTERN.search('推荐精灵等级为10级，当前上阵精灵平均等级为8级，是否确认继续挑战？'))
+        self.assertFalse(LEVEL_WARNING_PATTERN.search('推荐精灵等级：10'),
+                         '作战准备界面的「推荐精灵等级：10」不是确认弹窗，不能误判')
         self.assertTrue(CONFIRM_PATTERN.search('确认'))
         self.assertFalse(CONFIRM_PATTERN.search('确认挑战'))
         self.assertTrue(BATTLE_RESULT_PATTERN.search('挑战完成'))
@@ -220,6 +222,8 @@ class TestDailyActivity(TaskTestCase):
     def test_battle_prepare_screen(self):
         self._set(BATTLE)
         self.assertTrue(self.task._is_battle_prepare_open(), '「挑战次数」界面应被识别为作战准备')
+        self.assertFalse(self.task._is_level_warning(),
+                         '作战准备界面左上角的「推荐精灵等级：10」不能当成等级不足弹窗')
         self.assertFalse(self.task._is_stamina_shop_open())
         self.assertIn('勤劳致富的仙令', self.task._read_battle_header())
         self.assertEqual(self.task._read_battle_cost(), 20, '「挑战」按钮上的精力消耗应可读')
@@ -340,6 +344,67 @@ class TestDailyActivity(TaskTestCase):
                 self.assertFalse(self.task._run_stamina_battles())
         finally:
             self.task.config['消耗精力作战'] = True
+
+    # ---------- 领取前重新定位：扫描停在列表末尾，旧坐标会点到别的卡 ----------
+
+    def test_locate_card_finds_visible_card(self):
+        self._set(PAGE2)
+        with mock.patch.object(self.task, '_rewind_cards'), \
+                mock.patch.object(self.task, '_drag_cards_left') as drag:
+            card = self.task._locate_card('消耗120精力')
+        self.assertIsNotNone(card, '当前屏已有的卡片应直接定位到')
+        self.assertEqual(card['progress'], '0/120')
+        self.assertEqual(card['button'], '前往')
+        drag.assert_not_called()
+
+    def test_locate_card_pages_until_found(self):
+        page1_cards = [{'title': '登录游戏', 'progress': '1/1', 'claimable': True}]
+        page2_cards = [{'title': '消耗120精力', 'progress': '0/120', 'claimable': False}]
+        with mock.patch.object(self.task, '_rewind_cards'), \
+                mock.patch.object(self.task, 'next_frame'), \
+                mock.patch.object(self.task, '_parse_cards', side_effect=[page1_cards, page2_cards]), \
+                mock.patch.object(self.task, '_drag_cards_left') as drag:
+            card = self.task._locate_card('消耗120精力')
+        self.assertEqual(card, page2_cards[0], '第一屏没有时应左拖后在第二屏定位到')
+        self.assertEqual(drag.call_count, 1)
+
+    def test_locate_card_returns_none_when_missing(self):
+        with mock.patch.object(self.task, '_rewind_cards'), \
+                mock.patch.object(self.task, 'next_frame'), \
+                mock.patch.object(self.task, '_parse_cards', return_value=[]), \
+                mock.patch.object(self.task, '_drag_cards_left'):
+            self.assertIsNone(self.task._locate_card('不存在任务'))
+
+    def test_scan_claim_uses_fresh_card_coordinates(self):
+        stale = {'title': '登录游戏', 'progress': '1/1', 'reward': 100, 'claimable': True,
+                 'claim_x': 488, 'claim_y': 866, 'button': None}
+        fresh = dict(stale, claim_x=1490, claim_y=870)
+        with mock.patch.object(self.task, '_read_activity_total', return_value=0), \
+                mock.patch.object(self.task, '_rewind_cards'), \
+                mock.patch.object(self.task, '_scan_pages',
+                                  side_effect=[[stale], [dict(stale, claimable=False)]]) as scan, \
+                mock.patch.object(self.task, '_locate_card', return_value=fresh) as locate, \
+                mock.patch.object(self.task, '_claim_card') as claim:
+            self.task._scan_and_claim()
+        self.assertEqual(scan.call_count, 2, '领取后应重新扫描确认没有剩余可领取')
+        locate.assert_called_once_with('登录游戏')
+        claim.assert_called_once_with(fresh)
+        self.assertEqual(claim.call_args.args[0]['claim_x'], 1490, '必须点击回拖后重新定位的坐标')
+
+    def test_scan_claim_fails_when_claimable_card_lost(self):
+        from ok import TaskDisabledException
+        stale = {'title': '登录游戏', 'progress': '1/1', 'reward': 100, 'claimable': True,
+                 'claim_x': 488, 'claim_y': 866, 'button': None}
+        with mock.patch.object(self.task, '_read_activity_total', return_value=0), \
+                mock.patch.object(self.task, '_rewind_cards'), \
+                mock.patch.object(self.task, '_scan_pages', return_value=[stale]), \
+                mock.patch.object(self.task, '_locate_card', return_value=None), \
+                mock.patch.object(self.task, '_claim_card') as claim, \
+                mock.patch.object(self.task, '_raise_with_evidence',
+                                  side_effect=TaskDisabledException('找不到卡片')):
+            with self.assertRaises(TaskDisabledException):
+                self.task._scan_and_claim()
+        claim.assert_not_called()
 
 
 if __name__ == '__main__':

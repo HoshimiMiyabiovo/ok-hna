@@ -8,7 +8,8 @@
 - 进度徽章 x/y 作为每张卡的锚点，x>=y 视为已完成；
 - 底部没有「前往/进行中/已领取/已完成」文字、且整条金色按钮带存在 → 可领取；
 - 领取后以左侧活跃度奖章数字增长做硬校验；活跃度上限 500，满额后以卡片变为「已完成」为准；
-- 领取会让卡片重排（已完成移到右侧），所以每领一张都重新扫描。
+- 领取会让卡片重排（已完成移到右侧），所以每领一张都重新扫描；
+- 扫描会停在列表末尾，领取前必须回拖并重新定位卡片（2026-11-28 实机：直接点首页坐标会落到别的卡上）。
 活跃度里程碑（100/200/300/400/500）宝箱带红点，点击弹出「获得奖励」，点空白处关闭。
 
 领取完还有一步：日常目标里的「消耗120精力」只靠等日常做不满，必须主动去打。
@@ -75,7 +76,9 @@ LEVEL_CONFIRM_REGION = (0.45, 0.60, 0.72, 0.69)
 
 BLANK_CLOSE_PATTERN = re.compile(r"点击任意空白处关闭")
 REWARD_POPUP_PATTERN = re.compile(r"获得奖励")
-LEVEL_WARNING_PATTERN = re.compile(r"是否确认继续挑战|推荐精灵等级")
+# 作战准备界面左上角也有「推荐精灵等级：10」，不能拿它当弹窗特征；
+# 只有「推荐…是否确认继续挑战」的确认弹窗才含这句话
+LEVEL_WARNING_PATTERN = re.compile(r"是否确认继续挑战")
 CONFIRM_PATTERN = re.compile(r"^确认$")
 BATTLE_RESULT_PATTERN = re.compile(r"挑战完成|再次挑战")
 EXIT_PATTERN = re.compile(r"^退出$")
@@ -241,7 +244,13 @@ class DailyActivityTask(BaseTask):
             claimables = [card for card in cards if card['claimable']]
             if not claimables:
                 break
-            card = claimables[0]
+            card = self._locate_card(claimables[0]['title'])
+            if card is None:
+                self._raise_with_evidence(f"扫描到可领取卡片「{claimables[0]['title']}」，但回拖后在任何一屏都找不到它")
+            if not card['claimable']:
+                # 卡片状态在扫描后发生了变化，重新扫描而不是拿旧坐标硬点
+                self.log_warning(f"重新定位到的「{card['title']}」已不可领取（{card['button'] or '无按钮'}），重新扫描")
+                continue
             self._claim_card(card)
             claimed.append(card)
         else:
@@ -513,6 +522,18 @@ class DailyActivityTask(BaseTask):
             if current == previous:
                 return
             previous = current
+
+    def _locate_card(self, title):
+        """回到列表最左侧后逐屏查找指定卡片，返回当前滚动位置下的最新坐标。"""
+        key = normalize_title(title)
+        self._rewind_cards()
+        for _ in range(MAX_SCAN_PAGES):
+            self.next_frame()
+            for card in self._parse_cards():
+                if normalize_title(card['title']) == key:
+                    return card
+            self._drag_cards_left()
+        return None
 
     # ---------- 消耗精力作战：日常活跃 → 勤劳是福 → 作战准备 → 挑战 ----------
 
