@@ -1,14 +1,19 @@
-"""福利领取：F4「帮会助力」赛季战令一键领取 + Esc 菜单邮件附件领取。
+"""福利领取：F4「帮会助力」赛季战令（奖励页+任务页）领取 + Esc 菜单邮件附件领取。
 
 流程（从主世界开始，结束回主世界）：
-1. 帮会助力：按 F4 打开面板（标题 OCR `帮会助力` + 右上 `规则说明`）→
-   右下有「一键领取」才算有可领取奖励，点击后必须弹出「获得奖励」，点空白关闭；
-   领取成功后按钮会整颗消失，仍存在就报错。Esc 关闭面板。
+1. 帮会助力：按 F4 打开面板（标题 OCR `帮会助力` + 右上 `规则说明`）。
+   左侧图标栏切换子页：礼物图标=奖励页（OCR `前行礼遇`/`人脉拓展`），剪贴板图标=任务页（OCR `本周任务`/`本期任务`）。
+   两个子页右下都有「一键领取」：存在才算有可领取奖励。
+   - 奖励页点击后必须弹「获得奖励」，关闭后按钮必须消失；
+   - 任务页领取只加战令经验，可能只出现「帮会助力」等级提升（没有奖励弹窗），
+     以「按钮消失」为硬校验；领取升级后奖励页会出现新的可领奖励，所以两页循环领取直到都点不动。
+   最后 Esc 关闭面板。
 2. 邮件：Esc 打开菜单（OCR `因缘等级`）→ 点左侧纸飞机图标进「邮件」（OCR `邮件数`）→
    底部「全部领取」在无可领附件时是灰色禁用态（点击无反应，邮件列表也无红点）；
    列表有红点（RGB≈250,80,60）时点「全部领取」必须弹「获得奖励」，领取后红点必须消失。
 
-2026-11-28 实机：帮会助力 1/2 级奖励已领取验证通过（弹窗 + 按钮消失）；
+2026-11-28 实机：奖励页 1/2 级与升级后的 3 级奖励已领取（弹窗 + 按钮消失）；
+任务页「累计消耗精力400点」一键领取验证通过（周经验 2700→5400、等级 2→3、按钮与左侧红点消失）。
 邮件 4 封均为已读调研信、附件不可领（全部领取禁用、点附件只弹物品说明），
 「有红点 → 全部领取」的路径等新邮件到来后再实机复验。
 
@@ -27,7 +32,9 @@ from tasks.launcher import GAME_EXE, MAIN_WORLD_FEATURES, MAIN_WORLD_THRESHOLD, 
 # F4 帮会助力（赛季战令）面板
 BATTLE_PASS_TITLE_PATTERN = re.compile(r"帮会助力")
 BATTLE_PASS_MENU_PATTERN = re.compile(r"规则说明|购买等级")
-BATTLE_PASS_CLAIM_PATTERN = re.compile(r"^一键领取$")
+GUILD_CLAIM_PATTERN = re.compile(r"^一键领取$")
+GUILD_PASS_TAB_PATTERN = re.compile(r"前行礼遇|人脉拓展")
+GUILD_MISSION_TAB_PATTERN = re.compile(r"本周任务|本期任务")
 
 # Esc 菜单与邮件面板
 MENU_PATTERN = re.compile(r"因缘等级|主角详情")
@@ -42,11 +49,16 @@ MAIL_LIST_RED_MIN = 0.0005
 
 BATTLE_PASS_TITLE_REGION = (0.03, 0.005, 0.22, 0.09)
 BATTLE_PASS_MENU_REGION = (0.75, 0.005, 1.0, 0.09)
-BATTLE_PASS_CLAIM_REGION = (0.60, 0.78, 0.98, 0.97)
+GUILD_PASS_TAB_REGION = (0.05, 0.40, 0.24, 0.55)
+GUILD_MISSION_TAB_REGION = (0.10, 0.34, 0.22, 0.60)
+GUILD_CLAIM_REGION = (0.60, 0.78, 0.98, 0.97)
+GUILD_PASS_RAIL = (0.031, 0.166)
+GUILD_MISSION_RAIL = (0.031, 0.241)
 MAIL_LIST_REGION = (0.02, 0.08, 0.23, 0.55)
 MAIL_CLAIM_REGION = (0.10, 0.88, 0.28, 0.97)
 MAIL_ENTRY_POINT = (0.133, 0.293)
 POPUP_CLOSE_POINT = (0.90, 0.90)
+MAX_GUILD_CLAIM_ROUNDS = 5
 
 
 class WelfareTask(BaseTask):
@@ -59,7 +71,7 @@ class WelfareTask(BaseTask):
             '领取邮件附件': True,
         })
         self.config_description.update({
-            '领取战令奖励': '按 F4 打开帮会助力面板，有「一键领取」时领取赛季奖励',
+            '领取战令奖励': '按 F4 打开帮会助力面板，奖励页与任务页有「一键领取」时循环领取（任务页奖励会给战令经验）',
             '领取邮件附件': '从 Esc 菜单进入邮件，有可领附件时点「全部领取」',
         })
 
@@ -90,22 +102,75 @@ class WelfareTask(BaseTask):
             self.log_info(f'第 {attempt} 次按 F4 未识别到帮会助力面板，重试')
         if not opened:
             self._raise_with_evidence('按 F4 后未识别到「帮会助力」面板')
-        boxes = self.ocr(box=self.box_of_screen(*BATTLE_PASS_CLAIM_REGION), match=BATTLE_PASS_CLAIM_PATTERN)
-        if not boxes:
-            self.log_info('帮会助力没有「一键领取」按钮，当前没有可领取奖励')
+        claimed_any = False
+        for round_index in range(1, MAX_GUILD_CLAIM_ROUNDS + 1):
+            # 任务页领取会给战令经验，升级后奖励页会解锁新奖励，所以两页循环领
+            pass_claimed = self._claim_guild_pass_rewards()
+            mission_claimed = self._claim_guild_mission_rewards()
+            if not (pass_claimed or mission_claimed):
+                break
+            claimed_any = True
+            self.log_info(f'帮会助力第 {round_index} 轮领取完成（奖励页 {pass_claimed}，任务页 {mission_claimed}）')
         else:
-            box = boxes[0]
-            self.log_info(f'点击「一键领取」: {box}')
-            self.click(box, after_sleep=2)
-            if not self._wait_until(self._is_reward_popup, 5):
-                self._raise_with_evidence('点击「一键领取」后没有出现「获得奖励」弹窗')
-            self.screenshot('welfare_battle_pass_reward')
-            self._close_reward_popup()
-            leftovers = self.ocr(box=self.box_of_screen(*BATTLE_PASS_CLAIM_REGION), match=BATTLE_PASS_CLAIM_PATTERN)
-            if leftovers:
-                self._raise_with_evidence('领取后「一键领取」按钮仍然存在，奖励可能没有领完')
-            self.log_info('帮会助力奖励已领取')
+            self.next_frame()
+            if self._guild_claim_button() is not None:
+                self._raise_with_evidence(
+                    f'连续 {MAX_GUILD_CLAIM_ROUNDS} 轮后帮会助力仍有「一键领取」，奖励可能没有领完')
+        if not claimed_any:
+            self.log_info('帮会助力当前没有可领取奖励')
         self._close_battle_pass()
+
+    def _claim_guild_pass_rewards(self):
+        self._click_guild_rail(GUILD_PASS_RAIL)
+        if not self._wait_until(self._is_guild_pass_tab, 4):
+            self._raise_with_evidence('帮会助力面板没有切到奖励页（前行礼遇/人脉拓展）')
+        box = self._guild_claim_button()
+        if box is None:
+            return False
+        self.log_info(f'奖励页点击「一键领取」: {box}')
+        self.click(box, after_sleep=2)
+        if not self._wait_until(self._is_reward_popup, 5):
+            self._raise_with_evidence('奖励页点击「一键领取」后没有出现「获得奖励」弹窗')
+        self.screenshot('welfare_battle_pass_reward')
+        self._close_reward_popup()
+        if self._guild_claim_button() is not None:
+            self._raise_with_evidence('奖励页领取后「一键领取」按钮仍然存在')
+        self.log_info('帮会助力奖励页已领取')
+        return True
+
+    def _claim_guild_mission_rewards(self):
+        self._click_guild_rail(GUILD_MISSION_RAIL)
+        if not self._wait_until(self._is_guild_mission_tab, 4):
+            self._raise_with_evidence('帮会助力面板没有切到任务页（本周任务/本期任务）')
+        box = self._guild_claim_button()
+        if box is None:
+            return False
+        self.log_info(f'任务页点击「一键领取」: {box}')
+        self.click(box, after_sleep=1.5)
+        if self._wait_until(self._is_reward_popup, 3):
+            self._close_reward_popup()
+        self.screenshot('welfare_guild_mission_claimed')
+        # 任务页领取只加战令经验（可能只弹「等级提升」），以按钮消失为硬校验
+        for _ in range(16):
+            self.next_frame()
+            if self._guild_claim_button() is None:
+                self.log_info('帮会助力任务页已领取')
+                return True
+            self.sleep(0.5)
+        self._raise_with_evidence('任务页点击「一键领取」后按钮仍然存在，奖励可能没有领到')
+
+    def _guild_claim_button(self):
+        matches = self.ocr(box=self.box_of_screen(*GUILD_CLAIM_REGION), match=GUILD_CLAIM_PATTERN)
+        return matches[0] if matches else None
+
+    def _click_guild_rail(self, point):
+        self.click(int(self.width * point[0]), int(self.height * point[1]), after_sleep=1.5)
+
+    def _is_guild_pass_tab(self):
+        return bool(self.ocr(box=self.box_of_screen(*GUILD_PASS_TAB_REGION), match=GUILD_PASS_TAB_PATTERN))
+
+    def _is_guild_mission_tab(self):
+        return bool(self.ocr(box=self.box_of_screen(*GUILD_MISSION_TAB_REGION), match=GUILD_MISSION_TAB_PATTERN))
 
     def _close_battle_pass(self):
         for _ in range(3):

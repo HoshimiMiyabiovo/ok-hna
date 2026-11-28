@@ -14,11 +14,12 @@ if str(ROOT) not in sys.path:
 from config import config
 from ok.feature.Box import Box
 from ok.test.TaskTestCase import TaskTestCase
-from tasks.welfare import (BATTLE_PASS_CLAIM_PATTERN, BATTLE_PASS_CLAIM_REGION, MAIL_CLAIM_PATTERN,
+from tasks.welfare import (GUILD_CLAIM_PATTERN, GUILD_CLAIM_REGION, MAIL_CLAIM_PATTERN,
                            MAIL_CLAIM_REGION, WelfareTask)
 
 BATTLE_PASS = 'in_game_battle_pass.png'
 BATTLE_PASS_CLAIMED = 'in_game_battle_pass_claimed.png'
+GUILD_MISSION = 'in_game_guild_mission.png'
 MAIL = 'in_game_mail.png'
 MAIN_WORLD = 'in_game_main_world_updated.png'
 
@@ -51,13 +52,30 @@ class TestWelfare(TaskTestCase):
 
     def test_claim_all_button_only_when_claimable(self):
         self._set(BATTLE_PASS)
-        boxes = self.task.ocr(box=self.task.box_of_screen(*BATTLE_PASS_CLAIM_REGION),
-                              match=BATTLE_PASS_CLAIM_PATTERN)
-        self.assertTrue(boxes, '有奖励可领时右下应有「一键领取」')
+        self.assertIsNotNone(self.task._guild_claim_button(), '奖励页有奖励可领时右下应有「一键领取」')
         self._set(BATTLE_PASS_CLAIMED)
-        boxes = self.task.ocr(box=self.task.box_of_screen(*BATTLE_PASS_CLAIM_REGION),
-                              match=BATTLE_PASS_CLAIM_PATTERN)
-        self.assertFalse(boxes, '领取后「一键领取」按钮应消失')
+        self.assertIsNone(self.task._guild_claim_button(), '领取后「一键领取」按钮应消失')
+        self._set(GUILD_MISSION)
+        self.assertIsNotNone(self.task._guild_claim_button(), '任务页有可领奖励时右下应有「一键领取」')
+
+    def test_guild_sub_tabs_detected(self):
+        self._set(BATTLE_PASS)
+        self.assertTrue(self.task._is_guild_pass_tab(), '奖励页应 OCR 到「前行礼遇」')
+        self.assertFalse(self.task._is_guild_mission_tab(), '奖励页不是任务页')
+        self._set(GUILD_MISSION)
+        self.assertTrue(self.task._is_guild_mission_tab(), '任务页应 OCR 到「本周任务/本期任务」')
+        self.assertFalse(self.task._is_guild_pass_tab(), '任务页不是奖励页')
+        self.assertTrue(self.task._is_battle_pass_open(), '两个子页都属于帮会助力面板')
+        for name in (MAIL, MAIN_WORLD):
+            self._set(name)
+            self.assertFalse(self.task._is_guild_pass_tab(), f'{name} 不应识别为奖励页')
+            self.assertFalse(self.task._is_guild_mission_tab(), f'{name} 不应识别为任务页')
+
+    def test_guild_claim_pattern_region_matches_both_tabs(self):
+        for name in (BATTLE_PASS, GUILD_MISSION):
+            self._set(name)
+            boxes = self.task.ocr(box=self.task.box_of_screen(*GUILD_CLAIM_REGION), match=GUILD_CLAIM_PATTERN)
+            self.assertTrue(boxes, f'{name} 右下应能 OCR 到「一键领取」')
 
     def test_battle_pass_not_detected_elsewhere(self):
         for name in (MAIL, MAIN_WORLD):
@@ -76,29 +94,65 @@ class TestWelfare(TaskTestCase):
         self._set(MAIL)
         self.assertFalse(self.task._mail_has_red_badge(), '当日 4 封邮件附件均不可领，列表不应有红点')
 
-    def test_claim_battle_pass_clicks_once_and_verifies(self):
-        claim_box = Box(1438, 892, 105, 32, name='一键领取')
-        with mock.patch.object(self.task, 'send_key') as send_key, \
-                mock.patch.object(self.task, '_wait_until', return_value=True), \
-                mock.patch.object(self.task, 'ocr',
-                                  side_effect=[[claim_box], [], [], []]) as ocr, \
-                mock.patch.object(self.task, 'click') as click, \
-                mock.patch.object(self.task, 'screenshot'):
-            self.task._claim_battle_pass()
-        clicked = click.call_args_list[0].args[0]
-        self.assertEqual((clicked.x, clicked.y), (1438, 892), '应点击「一键领取」按钮')
-        send_key.assert_any_call('esc', after_sleep=1.2)
-        self.assertEqual(ocr.call_count, 4, '按钮/弹窗/残留按钮/空白提示各查一次')
-
-    def test_claim_battle_pass_skips_without_button(self):
+    def test_battle_pass_claims_both_tabs_in_rounds(self):
         with mock.patch.object(self.task, 'send_key'), \
                 mock.patch.object(self.task, '_wait_until', return_value=True), \
-                mock.patch.object(self.task, 'ocr', return_value=[]), \
-                mock.patch.object(self.task, 'click') as click, \
+                mock.patch.object(self.task, '_claim_guild_pass_rewards',
+                                  side_effect=[True, False]) as claim_pass, \
+                mock.patch.object(self.task, '_claim_guild_mission_rewards',
+                                  side_effect=[True, False]) as claim_mission, \
                 mock.patch.object(self.task, '_close_battle_pass') as close:
             self.task._claim_battle_pass()
-        click.assert_not_called()
+        self.assertEqual(claim_pass.call_count, 2, '第一轮领完任务页升级后，第二轮应回头再查奖励页')
+        self.assertEqual(claim_mission.call_count, 2)
         close.assert_called_once()
+
+    def test_battle_pass_skips_without_button(self):
+        with mock.patch.object(self.task, 'send_key'), \
+                mock.patch.object(self.task, '_wait_until', return_value=True), \
+                mock.patch.object(self.task, '_claim_guild_pass_rewards', return_value=False), \
+                mock.patch.object(self.task, '_claim_guild_mission_rewards', return_value=False), \
+                mock.patch.object(self.task, '_close_battle_pass') as close:
+            self.task._claim_battle_pass()
+        close.assert_called_once()
+
+    def test_guild_pass_tab_claim_flow(self):
+        claim_box = Box(1438, 892, 105, 32, name='一键领取')
+        with mock.patch.object(self.task, '_click_guild_rail'), \
+                mock.patch.object(self.task, '_wait_until', return_value=True), \
+                mock.patch.object(self.task, '_guild_claim_button', side_effect=[claim_box, None]), \
+                mock.patch.object(self.task, 'click') as click, \
+                mock.patch.object(self.task, 'screenshot'), \
+                mock.patch.object(self.task, '_close_reward_popup') as close_popup:
+            self.assertTrue(self.task._claim_guild_pass_rewards())
+        self.assertEqual((click.call_args.args[0].x, click.call_args.args[0].y), (1438, 892))
+        close_popup.assert_called_once()
+
+    def test_guild_mission_claim_flow_requires_button_gone(self):
+        claim_box = Box(1750, 890, 100, 30, name='一键领取')
+        with mock.patch.object(self.task, '_click_guild_rail'), \
+                mock.patch.object(self.task, '_wait_until', side_effect=[True, False]), \
+                mock.patch.object(self.task, '_guild_claim_button', side_effect=[claim_box, None]), \
+                mock.patch.object(self.task, 'click'), \
+                mock.patch.object(self.task, 'screenshot'), \
+                mock.patch.object(self.task, 'next_frame'), \
+                mock.patch.object(self.task, 'sleep'):
+            self.assertTrue(self.task._claim_guild_mission_rewards(), '任务页以按钮消失判定领取成功')
+
+    def test_guild_mission_claim_fails_when_button_stays(self):
+        from ok import TaskDisabledException
+        claim_box = Box(1750, 890, 100, 30, name='一键领取')
+        with mock.patch.object(self.task, '_click_guild_rail'), \
+                mock.patch.object(self.task, '_wait_until', side_effect=[True, False]), \
+                mock.patch.object(self.task, '_guild_claim_button', return_value=claim_box), \
+                mock.patch.object(self.task, 'click'), \
+                mock.patch.object(self.task, 'screenshot'), \
+                mock.patch.object(self.task, 'next_frame'), \
+                mock.patch.object(self.task, 'sleep'), \
+                mock.patch.object(self.task, '_raise_with_evidence',
+                                  side_effect=TaskDisabledException('按钮还在')):
+            with self.assertRaises(TaskDisabledException):
+                self.task._claim_guild_mission_rewards()
 
     def test_claim_mail_skips_when_disabled(self):
         with mock.patch.object(self.task, 'send_key'), \
@@ -127,7 +181,7 @@ class TestWelfare(TaskTestCase):
         close.assert_not_called()
 
     def test_new_templates_hide_account_uid(self):
-        for name in (BATTLE_PASS, BATTLE_PASS_CLAIMED, MAIL):
+        for name in (BATTLE_PASS, BATTLE_PASS_CLAIMED, GUILD_MISSION, MAIL):
             self._set(name)
             texts = [box.name for box in self.task.ocr(box=self.task.box_of_screen(0, 0.93, 1, 1.0))]
             self.assertFalse([text for text in texts if 'UID' in text.upper()], f'{name} 底栏仍能读出 UID: {texts}')
